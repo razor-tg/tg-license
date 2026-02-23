@@ -1,224 +1,215 @@
 require("dotenv").config();
 
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
-const express = require('express');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
+} = require("discord.js");
+
+const fs = require("fs");
+const { v4: uuidv4 } = require("uuid");
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1475400856152051836";
-const OWNER_ID = "1259124656124727307";
+const CLIENT_ID = "1259124656124727307";
 const GUILD_ID = "1439545058343915656";
+const PANEL_CHANNEL_ID = "1439844994327249039";
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
-let licenses = {};
-let blacklist = [];
-
-if (fs.existsSync("licenses.json")) {
-    licenses = JSON.parse(fs.readFileSync("licenses.json"));
-}
-if (fs.existsSync("blacklist.json")) {
-    blacklist = JSON.parse(fs.readFileSync("blacklist.json"));
-}
-
-client.once('ready', () => {
-    console.log(`Bot ready sebagai ${client.user.tag}`);
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
 });
 
-const commands = [
+/* ================= LOAD TRIAL DATA ================= */
 
-    new SlashCommandBuilder()
-        .setName('gettrial')
-        .setDescription('Generate trial license')
-        .addStringOption(o =>
-            o.setName('robloxid')
-                .setDescription('Masukkan Roblox User ID')
-                .setRequired(true))
-        .addIntegerOption(o =>
-            o.setName('days')
-                .setDescription('Durasi trial (max 3 hari)')
-                .setRequired(true)),
+let trials = {};
+if (fs.existsSync("trial.json")) {
+  trials = JSON.parse(fs.readFileSync("trial.json"));
+}
 
-    new SlashCommandBuilder()
-        .setName('getperm')
-        .setDescription('Generate permanent license')
-        .addStringOption(o =>
-            o.setName('robloxid')
-                .setDescription('Masukkan Roblox User ID')
-                .setRequired(true)),
+/* ================= AUTO PANEL SEND ================= */
 
-    new SlashCommandBuilder()
-        .setName('addgroup')
-        .setDescription('Tambahkan group ke license')
-        .addStringOption(o =>
-            o.setName('licensekey')
-                .setDescription('Masukkan license key')
-                .setRequired(true))
-        .addStringOption(o =>
-            o.setName('groupid')
-                .setDescription('Masukkan Group ID')
-                .setRequired(true)),
+client.once("ready", async () => {
+  console.log(`Bot ready sebagai ${client.user.tag}`);
 
-    new SlashCommandBuilder()
-        .setName('removegroup')
-        .setDescription('Hapus group dari license')
-        .addStringOption(o =>
-            o.setName('licensekey')
-                .setDescription('Masukkan license key')
-                .setRequired(true)),
+  const channel = await client.channels.fetch(PANEL_CHANNEL_ID);
 
-    new SlashCommandBuilder()
-        .setName('delete')
-        .setDescription('Hapus license')
-        .addStringOption(o =>
-            o.setName('licensekey')
-                .setDescription('Masukkan license key')
-                .setRequired(true)),
+  if (!channel) return console.log("Channel tidak ditemukan.");
 
-    new SlashCommandBuilder()
-        .setName('blacklist')
-        .setDescription('Blacklist Roblox ID')
-        .addStringOption(o =>
-            o.setName('robloxid')
-                .setDescription('Masukkan Roblox User ID')
-                .setRequired(true)),
+  // Hapus panel lama biar tidak spam
+  const messages = await channel.messages.fetch({ limit: 10 });
+  const botMessages = messages.filter(msg => 
+    msg.author.id === client.user.id
+  );
 
-].map(c => c.toJSON());
+  for (const msg of botMessages.values()) {
+    await msg.delete().catch(() => {});
+  }
 
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+  const embed = new EmbedBuilder()
+    .setColor("#5865F2")
+    .setTitle("🎫 PANEL UNTUK MEMBER DAN BUYER TG COMMUNITY")
+    .setDescription("Silakan pilih layanan di bawah ini.")
+    .addFields(
+      { name: "🧪 TRIAL", value: "Coba script 3 hari", inline: true },
+      { name: "📦 SCRIPT", value: "Download script langsung", inline: true }
+    )
+    .setFooter({ text: "TG Community License System" })
+    .setTimestamp();
 
-(async () => {
-    await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-        { body: commands },
-    );
-})();
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("trial_button")
+      .setLabel("TRIAL")
+      .setStyle(ButtonStyle.Primary),
 
-client.on('interactionCreate', async interaction => {
+    new ButtonBuilder()
+      .setCustomId("script_button")
+      .setLabel("SCRIPT")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
-    if (!interaction.isChatInputCommand()) return;
-    const now = Math.floor(Date.now() / 1000);
+  await channel.send({ embeds: [embed], components: [row] });
+});
 
-    if (interaction.commandName === 'gettrial') {
+/* ================= INTERACTION HANDLER ================= */
 
-        const robloxId = interaction.options.getString('robloxid');
-        const days = interaction.options.getInteger('days');
+client.on("interactionCreate", async (interaction) => {
 
-        if (days > 3)
-            return interaction.reply({ content: "❌ Max 3 hari.", ephemeral: true });
+  /* ===== SCRIPT BUTTON ===== */
+  if (interaction.isButton()) {
 
-        const usedDiscord = Object.values(licenses)
-            .find(l => l.discordId === interaction.user.id && l.type === "trial");
+    if (interaction.customId === "script_button") {
 
-        const usedRoblox = Object.values(licenses)
-            .find(l => l.robloxUserId === robloxId && l.type === "trial");
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("select_script")
+          .setPlaceholder("Pilih script...")
+          .addOptions([
+            { label: "Dance Script", value: "dance" },
+            { label: "Overhead Script", value: "overhead" }
+          ])
+      );
 
-        if (usedDiscord || usedRoblox)
-            return interaction.reply({ content: "❌ Trial sudah pernah digunakan.", ephemeral: true });
-
-        const key = "TG-" + uuidv4().slice(0, 8).toUpperCase();
-
-        licenses[key] = {
-            discordId: interaction.user.id,
-            robloxUserId: robloxId,
-            groupId: null,
-            type: "trial",
-            expireAt: now + (days * 86400),
-            status: "active"
-        };
-
-        fs.writeFileSync("licenses.json", JSON.stringify(licenses, null, 2));
-
-        await interaction.user.send(`🔑 License Trial:\n${key}\nDurasi: ${days} hari`);
-        return interaction.reply({ content: "✅ License dikirim ke DM.", ephemeral: true });
+      return interaction.reply({
+        content: "Pilih script yang ingin dikirim:",
+        components: [row],
+        ephemeral: true
+      });
     }
 
-    if (interaction.commandName === 'getperm') {
+    if (interaction.customId === "trial_button") {
 
-        if (interaction.user.id !== OWNER_ID)
-            return interaction.reply({ content: "❌ Owner only.", ephemeral: true });
+      const modal = new ModalBuilder()
+        .setCustomId("trial_form")
+        .setTitle("TRIAL SCRIPT");
 
-        const robloxId = interaction.options.getString('robloxid');
-        const key = "TG-" + uuidv4().slice(0, 8).toUpperCase();
+      const robloxInput = new TextInputBuilder()
+        .setCustomId("roblox_id")
+        .setLabel("ID ROBLOX")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-        licenses[key] = {
-            discordId: interaction.user.id,
-            robloxUserId: robloxId,
-            groupId: null,
-            type: "permanent",
-            expireAt: null,
-            status: "active"
-        };
+      const scriptInput = new TextInputBuilder()
+        .setCustomId("script_name")
+        .setLabel("SCRIPT (Dance / Overhead)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-        fs.writeFileSync("licenses.json", JSON.stringify(licenses, null, 2));
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(robloxInput),
+        new ActionRowBuilder().addComponents(scriptInput)
+      );
 
-        return interaction.reply(`🔥 Permanent license dibuat:\n${key}`);
+      return interaction.showModal(modal);
     }
+  }
 
-    if (interaction.user.id !== OWNER_ID)
-        return interaction.reply({ content: "❌ Owner only.", ephemeral: true });
+  /* ===== SELECT SCRIPT ===== */
+  if (interaction.isStringSelectMenu()) {
 
-    const key = interaction.options.getString('licensekey');
+    if (interaction.customId === "select_script") {
 
-    if (interaction.commandName === 'addgroup') {
-        const groupId = interaction.options.getString('groupid');
-        if (!licenses[key]) return interaction.reply("❌ License tidak ditemukan.");
-        licenses[key].groupId = parseInt(groupId);
-        fs.writeFileSync("licenses.json", JSON.stringify(licenses, null, 2));
-        return interaction.reply("✅ Group ditambahkan.");
+      const script = interaction.values[0];
+
+      const fileMap = {
+        music: "./files/MusicPlayer.rbxm",
+        dance: "./files/DanceGUI by TG.rbxm"
+      };
+
+      try {
+        await interaction.user.send({
+          content: `📦 Berikut script kamu (${script})`,
+          files: [fileMap[script]]
+        });
+
+        return interaction.reply({
+          content: "✅ Script dikirim ke DM kamu.",
+          ephemeral: true
+        });
+
+      } catch {
+        return interaction.reply({
+          content: "❌ Gagal kirim DM. Aktifkan DM kamu.",
+          ephemeral: true
+        });
+      }
     }
+  }
 
-    if (interaction.commandName === 'removegroup') {
-        if (!licenses[key]) return interaction.reply("❌ License tidak ditemukan.");
-        licenses[key].groupId = null;
-        fs.writeFileSync("licenses.json", JSON.stringify(licenses, null, 2));
-        return interaction.reply("✅ Group dihapus.");
-    }
+  /* ===== TRIAL FORM SUBMIT ===== */
+  if (interaction.isModalSubmit()) {
 
-    if (interaction.commandName === 'delete') {
-        delete licenses[key];
-        fs.writeFileSync("licenses.json", JSON.stringify(licenses, null, 2));
-        return interaction.reply("✅ License dihapus.");
-    }
+    if (interaction.customId === "trial_form") {
 
-    if (interaction.commandName === 'blacklist') {
-        const robloxId = interaction.options.getString('robloxid');
-        blacklist.push(robloxId);
-        fs.writeFileSync("blacklist.json", JSON.stringify(blacklist, null, 2));
-        return interaction.reply("🚫 Roblox ID diblacklist.");
+      const robloxId = interaction.fields.getTextInputValue("roblox_id");
+      const scriptName = interaction.fields.getTextInputValue("script_name");
+      const discordId = interaction.user.id;
+
+      if (trials[discordId] || Object.values(trials).includes(robloxId)) {
+        return interaction.reply({
+          content: "❌ Kamu sudah pernah mencoba trial.",
+          ephemeral: true
+        });
+      }
+
+      const licenseKey = uuidv4();
+
+      trials[discordId] = robloxId;
+      fs.writeFileSync("trial.json", JSON.stringify(trials, null, 2));
+
+      try {
+        await interaction.user.send(`
+🎉 Trial Berhasil!
+
+🔑 License:
+\`${licenseKey}\`
+
+📜 Script: ${scriptName}
+⏳ Durasi: 3 Hari
+`);
+
+        return interaction.reply({
+          content: "✅ Trial berhasil! License dikirim ke DM.",
+          ephemeral: true
+        });
+
+      } catch {
+        return interaction.reply({
+          content: "❌ Gagal kirim DM. Aktifkan DM kamu.",
+          ephemeral: true
+        });
+      }
     }
+  }
+
 });
 
 client.login(TOKEN);
-
-// ===== EXPRESS API =====
-const app = express();
-app.use(express.json());
-
-app.post('/check', (req, res) => {
-
-    const { licenseKey, creatorId, creatorType } = req.body;
-
-    if (!licenses[licenseKey])
-        return res.json({ valid: false });
-
-    const data = licenses[licenseKey];
-    const now = Math.floor(Date.now() / 1000);
-
-    if (blacklist.includes(data.robloxUserId))
-        return res.json({ valid: false });
-
-    if (data.type === "trial" && now > data.expireAt)
-        return res.json({ valid: false });
-
-    if (creatorType === "User" && parseInt(creatorId) === parseInt(data.robloxUserId))
-        return res.json({ valid: true });
-
-    if (creatorType === "Group" && data.groupId && parseInt(creatorId) === parseInt(data.groupId))
-        return res.json({ valid: true });
-
-    return res.json({ valid: false });
-});
-
-app.listen(3000, () => console.log("API berjalan di port 3000"));
