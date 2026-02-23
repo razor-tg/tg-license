@@ -39,7 +39,7 @@ STRUKTUR trial.json:
 {
   "discordId": {
      "dance": { robloxId: "123", expire: 123123123 },
-     "overhead": { robloxId: "456", expire: 123123123 }
+     "musicp": { robloxId: "456", expire: 123123123 }
   }
 }
 */
@@ -136,8 +136,8 @@ client.on("interactionCreate", async (interaction) => {
         .setCustomId("trial_select")
         .setPlaceholder("Pilih script untuk trial...")
         .addOptions([
-          { label: "Dance Script", value: "dance" },
-          { label: "Overhead Script", value: "overhead" }
+          { label: "DanceGUI by TG Script", value: "dance" },
+          { label: "Music Player Script", value: "musicp" }
         ])
     );
 
