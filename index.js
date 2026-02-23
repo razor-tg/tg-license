@@ -117,8 +117,8 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isStringSelectMenu() && interaction.customId === "select_script") {
 
     const fileMap = {
-      dance: "./files/DanceGUI by TG.rbxm",
-      musicp: "./files/MusicPlayer.rbxm"
+      dance: "./files/danceguifree.rbxm",
+      musicp: "./files/musicplayerfree.rbxm"
     };
 
     return interaction.reply({
