@@ -23,27 +23,32 @@ const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 
 const TOKEN = process.env.TOKEN;
+
 const CLIENT_ID = "1259124656124727307";
 const GUILD_ID = "1439545058343915656";
-const PANEL_CHANNEL = "1439844994327249039";
+const PANEL_CHANNEL = "1439842726433787984";
 const OWNER_ID = "1259124656124727307";
-const TICKET_CATEGORY = "1439842726433787984";
+const TICKET_CATEGORY = "1439842726433787984"; // ✅ SUDAH DIISI
 
-/* ================= INIT FILES ================= */
+/* ================= STORAGE ================= */
 
 if (!fs.existsSync("./trial.json")) fs.writeFileSync("./trial.json", "{}");
 if (!fs.existsSync("./licenses.json")) fs.writeFileSync("./licenses.json", "{}");
-if (!fs.existsSync("./ticketCount.json")) fs.writeFileSync("./ticketCount.json", JSON.stringify({count:0}));
+if (!fs.existsSync("./ticketCount.json"))
+  fs.writeFileSync("./ticketCount.json", JSON.stringify({ count: 0 }));
 
-function getJSON(file){ return JSON.parse(fs.readFileSync(file)); }
-function saveJSON(file,data){ fs.writeFileSync(file, JSON.stringify(data,null,2)); }
+function getJSON(file) {
+  return JSON.parse(fs.readFileSync(file));
+}
+
+function saveJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+/* ================= CLIENT ================= */
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 /* ================= REGISTER COMMAND ================= */
@@ -55,6 +60,7 @@ const commands = [
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
+
 (async () => {
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -88,7 +94,7 @@ client.once("ready", async () => {
   await channel.send({ embeds:[embed], components:[row] });
 });
 
-/* ================= INTERACTION ================= */
+/* ================= INTERACTIONS ================= */
 
 client.on(Events.InteractionCreate, async interaction => {
 
@@ -104,7 +110,6 @@ client.on(Events.InteractionCreate, async interaction => {
       ]);
 
     return interaction.reply({
-      content:"Pilih script:",
       components:[new ActionRowBuilder().addComponents(select)],
       ephemeral:true
     });
@@ -115,7 +120,7 @@ client.on(Events.InteractionCreate, async interaction => {
     const filePath = path.join(__dirname,"Files",interaction.values[0]);
     if(!fs.existsSync(filePath)) return interaction.editReply("❌ File tidak ditemukan.");
     await interaction.user.send({ files:[filePath] });
-    return interaction.editReply("✅ File dikirim ke DM kamu.");
+    return interaction.editReply("✅ File dikirim ke DM.");
   }
 
   /* ===== TRIAL ===== */
@@ -130,7 +135,6 @@ client.on(Events.InteractionCreate, async interaction => {
       ]);
 
     return interaction.reply({
-      content:"Pilih script trial:",
       components:[new ActionRowBuilder().addComponents(select)],
       ephemeral:true
     });
@@ -158,7 +162,6 @@ client.on(Events.InteractionCreate, async interaction => {
     const robloxId = interaction.fields.getTextInputValue("roblox_id");
 
     if(!trials[interaction.user.id]) trials[interaction.user.id] = {};
-
     if(trials[interaction.user.id][script])
       return interaction.reply({content:"❌ Kamu sudah trial script ini.",ephemeral:true});
 
@@ -204,17 +207,11 @@ client.on(Events.InteractionCreate, async interaction => {
 a.n MUHAMMAD TEGAR PURNAMAWANSYAH  
 
 Kirim format:
-
-ID ROBLOX: 12345678  
+ID ROBLOX: 12345678
 SCRIPT: VIP / SYNC
 `);
 
     await ticket.send({embeds:[embed]});
-
-    const qrisPath = path.join(__dirname,"Assets","qris.png");
-    if(fs.existsSync(qrisPath))
-      await ticket.send({files:[qrisPath]});
-
     return interaction.reply({content:`✅ Ticket dibuat: ${ticket}`,ephemeral:true});
   }
 
