@@ -1,268 +1,195 @@
 require("dotenv").config();
-
 const {
-  Client,
-  GatewayIntentBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ChannelType,
-  PermissionsBitField
+    Client,
+    GatewayIntentBits,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    Events
 } = require("discord.js");
 
 const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
+const path = require("path");
 
 const TOKEN = process.env.TOKEN;
-const PANEL_CHANNEL_ID = "1439844994327249039";
-const OWNER_ID = "1259124656124727307";
+const CHANNEL_ID = "1439844994327249039";
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+    intents: [GatewayIntentBits.Guilds]
 });
 
-/* ================= LOAD TRIAL DATA ================= */
-
-let trials = {};
-if (fs.existsSync("trial.json")) {
-  trials = JSON.parse(fs.readFileSync("trial.json"));
+const trialFile = "./trial.json";
+if (!fs.existsSync(trialFile)) {
+    fs.writeFileSync(trialFile, JSON.stringify({}));
 }
 
-/*
-STRUKTUR trial.json:
-
-{
-  "discordId": {
-     "dance": { robloxId: "123", expire: 123123123 },
-     "musicp": { robloxId: "456", expire: 123123123 }
-  }
+function getTrials() {
+    return JSON.parse(fs.readFileSync(trialFile));
 }
-*/
 
-/* ================= READY ================= */
+function saveTrials(data) {
+    fs.writeFileSync(trialFile, JSON.stringify(data, null, 2));
+}
 
 client.once("ready", async () => {
-  console.log(`Bot ready sebagai ${client.user.tag}`);
+    console.log(`Logged in as ${client.user.tag}`);
 
-  const channel = await client.channels.fetch(PANEL_CHANNEL_ID).catch(() => null);
-  if (!channel) return console.log("Panel channel tidak ditemukan.");
+    const channel = await client.channels.fetch(CHANNEL_ID);
 
-  const messages = await channel.messages.fetch({ limit: 10 });
-  messages
-    .filter(m => m.author.id === client.user.id)
-    .forEach(m => m.delete().catch(() => {}));
+    const embed = new EmbedBuilder()
+        .setTitle("🎟️ TG COMMUNITY PANEL")
+        .setDescription("Pilih layanan di bawah ini.\n\n🟢 **Trial** - Coba script (1x saja)\n📦 **Script** - Download file\n💰 **Buy** - Buat ticket pembelian")
+        .setColor("#00ffcc")
+        .setFooter({ text: "TG License System • Modern Edition" });
 
-  const embed = new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎫 TG COMMUNITY PANEL")
-    .setDescription("Pilih layanan di bawah ini.")
-    .addFields(
-      { name: "🧪 Trial", value: "Trial 3 hari (1x per script)", inline: true },
-      { name: "📦 Script", value: "Download script langsung", inline: true },
-      { name: "🛒 Buy", value: "Buat ticket pembelian", inline: true }
-    )
-    .setFooter({ text: "TG License System • Modern Edition" })
-    .setTimestamp();
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId("trial")
+            .setLabel("TRIAL")
+            .setStyle(ButtonStyle.Primary),
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("trial_button")
-      .setLabel("TRIAL")
-      .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId("script")
+            .setLabel("SCRIPT")
+            .setStyle(ButtonStyle.Secondary),
 
-    new ButtonBuilder()
-      .setCustomId("script_button")
-      .setLabel("SCRIPT")
-      .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId("buy")
+            .setLabel("BUY")
+            .setStyle(ButtonStyle.Success)
+    );
 
-    new ButtonBuilder()
-      .setCustomId("buy_button")
-      .setLabel("BUY")
-      .setStyle(ButtonStyle.Success)
-  );
-
-  await channel.send({ embeds: [embed], components: [row] });
+    await channel.send({ embeds: [embed], components: [buttons] });
 });
 
-/* ================= INTERACTIONS ================= */
+client.on(Events.InteractionCreate, async interaction => {
 
-client.on("interactionCreate", async (interaction) => {
+    // ================= BUTTONS =================
+    if (interaction.isButton()) {
 
-  /* ===== SCRIPT BUTTON ===== */
-  if (interaction.isButton() && interaction.customId === "script_button") {
+        if (interaction.customId === "trial") {
 
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("select_script")
-        .setPlaceholder("Pilih script...")
-        .addOptions([
-          { label: "Music Player Script", value: "musicp" },
-          { label: "Dance Gui Script", value: "dance" }
-        ])
-    );
+            const trials = getTrials();
+            if (trials[interaction.user.id]) {
+                return interaction.reply({
+                    content: "❌ Kamu sudah pernah menggunakan trial.",
+                    ephemeral: true
+                });
+            }
 
-    return interaction.reply({
-      content: "Pilih script:",
-      components: [row],
-      ephemeral: true
-    });
-  }
+            const modal = new ModalBuilder()
+                .setCustomId("trial_modal")
+                .setTitle("TRIAL SCRIPT");
 
-  /* ===== SCRIPT SELECT ===== */
-  if (interaction.isStringSelectMenu() && interaction.customId === "select_script") {
+            const robloxInput = new TextInputBuilder()
+                .setCustomId("roblox_id")
+                .setLabel("ID ROBLOX")
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
 
-    const fileMap = {
-      dance: "./files/danceguifree.rbxm",
-      musicp: "./files/musicplayerfree.rbxm"
-    };
+            const scriptInput = new TextInputBuilder()
+                .setCustomId("script_name")
+                .setLabel("SCRIPT (dance / music)")
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
 
-    return interaction.reply({
-      content: `📦 Berikut script kamu (${interaction.values[0]})`,
-      files: [fileMap[interaction.values[0]]],
-      ephemeral: true
-    });
-  }
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(robloxInput),
+                new ActionRowBuilder().addComponents(scriptInput)
+            );
 
-  /* ===== TRIAL BUTTON ===== */
-  if (interaction.isButton() && interaction.customId === "trial_button") {
-
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("trial_select")
-        .setPlaceholder("Pilih script untuk trial...")
-        .addOptions([
-          { label: "DanceGUI by TG Script", value: "dance" },
-          { label: "Music Player Script", value: "musicp" }
-        ])
-    );
-
-    return interaction.reply({
-      content: "Pilih script untuk trial:",
-      components: [row],
-      ephemeral: true
-    });
-  }
-
-  /* ===== TRIAL SELECT ===== */
-  if (interaction.isStringSelectMenu() && interaction.customId === "trial_select") {
-
-    const selected = interaction.values[0];
-
-    const modal = new ModalBuilder()
-      .setCustomId(`trial_form_${selected}`)
-      .setTitle("TRIAL SCRIPT (3 HARI)");
-
-    const robloxInput = new TextInputBuilder()
-      .setCustomId("roblox_id")
-      .setLabel("ID ROBLOX")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(robloxInput)
-    );
-
-    return interaction.showModal(modal);
-  }
-
-  /* ===== TRIAL SUBMIT ===== */
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("trial_form_")) {
-
-    const scriptName = interaction.customId.replace("trial_form_", "");
-    const robloxId = interaction.fields.getTextInputValue("roblox_id");
-    const discordId = interaction.user.id;
-
-    if (!trials[discordId]) trials[discordId] = {};
-
-    if (trials[discordId][scriptName]) {
-      return interaction.reply({
-        content: "❌ Kamu sudah pernah trial script ini.",
-        ephemeral: true
-      });
-    }
-
-    // cek roblox ID sudah pernah trial script ini atau belum
-    for (let user in trials) {
-      if (trials[user][scriptName]?.robloxId === robloxId) {
-        return interaction.reply({
-          content: "❌ ID Roblox ini sudah pernah trial script ini.",
-          ephemeral: true
-        });
-      }
-    }
-
-    const expireTime = Date.now() + (3 * 24 * 60 * 60 * 1000);
-    const licenseKey = `${scriptName.toUpperCase()}-${uuidv4()}`;
-
-    trials[discordId][scriptName] = {
-      robloxId: robloxId,
-      expire: expireTime
-    };
-
-    fs.writeFileSync("trial.json", JSON.stringify(trials, null, 2));
-
-    await interaction.user.send(
-`🎉 Trial Aktif!
-
-📜 Script: ${scriptName}
-🔑 License:
-${licenseKey}
-
-⏳ Expire:
-${new Date(expireTime).toLocaleString()}`
-    );
-
-    return interaction.reply({
-      content: "✅ Trial berhasil! License dikirim ke DM.",
-      ephemeral: true
-    });
-  }
-
-  /* ===== BUY BUTTON ===== */
-  if (interaction.isButton() && interaction.customId === "buy_button") {
-
-    const existing = interaction.guild.channels.cache.find(
-      c => c.name === `ticket-${interaction.user.id}`
-    );
-
-    if (existing) {
-      return interaction.reply({
-        content: "❌ Kamu sudah punya ticket.",
-        ephemeral: true
-      });
-    }
-
-    const ticket = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: OWNER_ID,
-          allow: [PermissionsBitField.Flags.ViewChannel]
+            return interaction.showModal(modal);
         }
-      ]
-    });
 
-    await ticket.send(`🎫 Ticket dibuat oleh <@${interaction.user.id}>`);
+        if (interaction.customId === "script") {
 
-    return interaction.reply({
-      content: `✅ Ticket dibuat: ${ticket}`,
-      ephemeral: true
-    });
-  }
+            const select = new StringSelectMenuBuilder()
+                .setCustomId("script_select")
+                .setPlaceholder("Pilih script...")
+                .addOptions([
+                    { label: "Dance GUI", value: "dance" },
+                    { label: "Music Player", value: "music" }
+                ]);
+
+            const row = new ActionRowBuilder().addComponents(select);
+
+            return interaction.reply({
+                content: "Pilih script:",
+                components: [row],
+                ephemeral: true
+            });
+        }
+
+        if (interaction.customId === "buy") {
+            return interaction.reply({
+                content: "💰 Untuk membeli script, silakan hubungi admin.",
+                ephemeral: true
+            });
+        }
+    }
+
+    // ================= SELECT MENU =================
+    if (interaction.isStringSelectMenu()) {
+
+        await interaction.deferReply({ ephemeral: true });
+
+        let fileName;
+
+        if (interaction.values[0] === "dance") {
+            fileName = "danceguifree.rbxm";
+        }
+
+        if (interaction.values[0] === "music") {
+            fileName = "musicplayerfree.rbxm";
+        }
+
+        const filePath = path.join(__dirname, "Files", fileName);
+
+        if (!fs.existsSync(filePath)) {
+            return interaction.editReply("❌ File tidak ditemukan di server.");
+        }
+
+        try {
+            await interaction.user.send({
+                content: "📦 Berikut file script kamu:",
+                files: [filePath]
+            });
+
+            await interaction.editReply("✅ Script berhasil dikirim ke DM kamu!");
+        } catch (err) {
+            console.error(err);
+            await interaction.editReply("❌ Gagal kirim DM. Aktifkan DM server members.");
+        }
+    }
+
+    // ================= MODAL =================
+    if (interaction.isModalSubmit()) {
+
+        if (interaction.customId === "trial_modal") {
+
+            const robloxId = interaction.fields.getTextInputValue("roblox_id");
+            const scriptName = interaction.fields.getTextInputValue("script_name").toLowerCase();
+
+            const trials = getTrials();
+            trials[interaction.user.id] = {
+                robloxId,
+                scriptName,
+                date: Date.now()
+            };
+
+            saveTrials(trials);
+
+            return interaction.reply({
+                content: `✅ Trial berhasil!\nRoblox ID: ${robloxId}\nScript: ${scriptName}\n\nTrial hanya bisa digunakan 1x.`,
+                ephemeral: true
+            });
+        }
+    }
 
 });
 
