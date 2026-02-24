@@ -125,13 +125,60 @@ client.on(Events.InteractionCreate, async interaction => {
             });
         }
 
-        if (interaction.customId === "buy") {
-            return interaction.reply({
-                content: "💰 Untuk membeli script, silakan hubungi admin.",
-                ephemeral: true
-            });
-        }
+     if (interaction.customId === "buy") {
+
+    const existing = interaction.guild.channels.cache.find(
+        c => c.name === `ticket-${interaction.user.id}`
+    );
+
+    if (existing) {
+        return interaction.reply({
+            content: "❌ Kamu sudah punya ticket aktif.",
+            ephemeral: true
+        });
     }
+
+    const ticket = await interaction.guild.channels.create({
+        name: `ticket-${interaction.user.id}`,
+        type: 0,
+        permissionOverwrites: [
+            {
+                id: interaction.guild.id,
+                deny: ["ViewChannel"]
+            },
+            {
+                id: interaction.user.id,
+                allow: ["ViewChannel", "SendMessages"]
+            },
+            {
+                id: interaction.client.user.id,
+                allow: ["ViewChannel", "SendMessages", "EmbedLinks", "AttachFiles"]
+            }
+        ]
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle("🎫 Ticket Pembelian")
+        .setDescription(`Halo <@${interaction.user.id}>\nSilakan pilih script yang ingin dibeli.`)
+        .setColor("#00ffcc");
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId("buy_select_script")
+        .setPlaceholder("Pilih script untuk dibeli...")
+        .addOptions([
+            { label: "Dance GUI", value: "dance" },
+            { label: "Music Player", value: "music" }
+        ]);
+
+    const row = new ActionRowBuilder().addComponents(select);
+
+    await ticket.send({ embeds: [embed], components: [row] });
+
+    await interaction.reply({
+        content: `✅ Ticket dibuat: ${ticket}`,
+        ephemeral: true
+    });
+}
 
     // ================= SELECT MENU =================
     if (interaction.isStringSelectMenu()) {
@@ -166,6 +213,56 @@ client.on(Events.InteractionCreate, async interaction => {
             await interaction.editReply("❌ Gagal kirim DM. Aktifkan DM server members.");
         }
     }
+
+    if (interaction.customId === "buy_select_script") {
+
+    let priceText = "";
+    let scriptName = interaction.values[0];
+
+    if (scriptName === "dance") {
+        priceText = "Rp 50.000";
+    }
+
+    if (scriptName === "music") {
+        priceText = "Rp 75.000";
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle("💳 Informasi Pembayaran")
+        .setDescription(`
+📜 Script: **${scriptName}**
+💰 Harga: **${priceText}**
+
+🏦 Pembayaran:
+• BNI: 1234567890 a.n TG COMMUNITY
+• QRIS: (scan QR di bawah)
+
+Setelah transfer, kirim bukti pembayaran di sini.
+`)
+        .setColor("#00ffcc");
+
+    return interaction.reply({
+        embeds: [embed]
+    });
+}
+
+const closeBtn = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("Close Ticket")
+        .setStyle(ButtonStyle.Danger)
+);
+
+await interaction.channel.send({ components: [closeBtn] });
+
+const closeBtn = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("Close Ticket")
+        .setStyle(ButtonStyle.Danger)
+);
+
+await interaction.channel.send({ components: [closeBtn] });
 
     // ================= MODAL =================
     if (interaction.isModalSubmit()) {
