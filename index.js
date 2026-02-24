@@ -12,50 +12,72 @@ const {
   TextInputStyle,
   ChannelType,
   PermissionsBitField,
-  Events
+  Events,
+  SlashCommandBuilder,
+  REST,
+  Routes
 } = require("discord.js");
 
 const fs = require("fs");
 const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = "1259124656124727307";
+const GUILD_ID = "1439545058343915656";
 const PANEL_CHANNEL = "1439844994327249039";
 const OWNER_ID = "1259124656124727307";
+const TICKET_CATEGORY = "1439842726433787984";
+
+/* ================= INIT FILES ================= */
+
+if (!fs.existsSync("./trial.json")) fs.writeFileSync("./trial.json", "{}");
+if (!fs.existsSync("./licenses.json")) fs.writeFileSync("./licenses.json", "{}");
+if (!fs.existsSync("./ticketCount.json")) fs.writeFileSync("./ticketCount.json", JSON.stringify({count:0}));
+
+function getJSON(file){ return JSON.parse(fs.readFileSync(file)); }
+function saveJSON(file,data){ fs.writeFileSync(file, JSON.stringify(data,null,2)); }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-/* ================= TRIAL DATA ================= */
+/* ================= REGISTER COMMAND ================= */
 
-const trialPath = "./trial.json";
-if (!fs.existsSync(trialPath)) fs.writeFileSync(trialPath, "{}");
+const commands = [
+  new SlashCommandBuilder()
+    .setName("success")
+    .setDescription("Konfirmasi pembayaran & kirim script premium")
+].map(cmd => cmd.toJSON());
 
-function getTrials() {
-  return JSON.parse(fs.readFileSync(trialPath));
-}
-function saveTrials(data) {
-  fs.writeFileSync(trialPath, JSON.stringify(data, null, 2));
-}
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+(async () => {
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+})();
 
-/* ================= READY ================= */
+/* ================= READY PANEL ================= */
 
 client.once("ready", async () => {
-  console.log(`Bot ready: ${client.user.tag}`);
+  console.log(`Bot Ready: ${client.user.tag}`);
 
-  const channel = await client.channels.fetch(PANEL_CHANNEL);
+  const channel = await client.channels.fetch(PANEL_CHANNEL).catch(()=>null);
   if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setTitle("🎫 TG COMMUNITY PANEL")
-    .setDescription("Silakan pilih layanan di bawah ini.")
-    .addFields(
-      { name: "🧪 Trial", value: "Trial 1x per script", inline: true },
-      { name: "📦 Script", value: "Download free script", inline: true },
-      { name: "💎 Buy", value: "Beli script premium", inline: true }
-    )
     .setColor("#00ffcc")
-    .setFooter({ text: "TG License System" });
+    .setDescription(`
+🧪 Trial 1x per script  
+📦 Download Free Script  
+💎 Buy Premium Script
+`);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("trial").setLabel("TRIAL").setStyle(ButtonStyle.Primary),
@@ -63,45 +85,36 @@ client.once("ready", async () => {
     new ButtonBuilder().setCustomId("buy").setLabel("BUY").setStyle(ButtonStyle.Success)
   );
 
-  await channel.send({ embeds: [embed], components: [row] });
+  await channel.send({ embeds:[embed], components:[row] });
 });
 
 /* ================= INTERACTION ================= */
 
 client.on(Events.InteractionCreate, async interaction => {
 
-  /* ===== SCRIPT DOWNLOAD ===== */
+  /* ===== FREE SCRIPT ===== */
   if (interaction.isButton() && interaction.customId === "script") {
 
     const select = new StringSelectMenuBuilder()
       .setCustomId("free_select")
       .setPlaceholder("Pilih free script")
       .addOptions([
-        { label: "Dance GUI Free", value: "danceguifree.rbxm" },
-        { label: "Music Player Free", value: "musicplayerfree.rbxm" }
+        { label:"Dance GUI Free", value:"danceguifree.rbxm" },
+        { label:"Music Player Free", value:"musicplayerfree.rbxm" }
       ]);
 
     return interaction.reply({
-      content: "Pilih script:",
-      components: [new ActionRowBuilder().addComponents(select)],
-      ephemeral: true
+      content:"Pilih script:",
+      components:[new ActionRowBuilder().addComponents(select)],
+      ephemeral:true
     });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === "free_select") {
-    await interaction.deferReply({ ephemeral: true });
-
-    const filePath = path.join(__dirname, "Files", interaction.values[0]);
-
-    if (!fs.existsSync(filePath)) {
-      return interaction.editReply("❌ File tidak ditemukan.");
-    }
-
-    await interaction.user.send({
-      content: "📦 Berikut file kamu:",
-      files: [filePath]
-    });
-
+    await interaction.deferReply({ephemeral:true});
+    const filePath = path.join(__dirname,"Files",interaction.values[0]);
+    if(!fs.existsSync(filePath)) return interaction.editReply("❌ File tidak ditemukan.");
+    await interaction.user.send({ files:[filePath] });
     return interaction.editReply("✅ File dikirim ke DM kamu.");
   }
 
@@ -110,21 +123,20 @@ client.on(Events.InteractionCreate, async interaction => {
 
     const select = new StringSelectMenuBuilder()
       .setCustomId("trial_select")
-      .setPlaceholder("Pilih script untuk trial")
+      .setPlaceholder("Pilih script trial")
       .addOptions([
-        { label: "VIP System", value: "vipsystem.rbxm" },
-        { label: "Sync Dance", value: "syncdance.rbxm" }
+        { label:"VIP System", value:"vipsystem.rbxm" },
+        { label:"Sync Dance", value:"syncdance.rbxm" }
       ]);
 
     return interaction.reply({
-      content: "Pilih script trial:",
-      components: [new ActionRowBuilder().addComponents(select)],
-      ephemeral: true
+      content:"Pilih script trial:",
+      components:[new ActionRowBuilder().addComponents(select)],
+      ephemeral:true
     });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === "trial_select") {
-
     const modal = new ModalBuilder()
       .setCustomId(`trial_modal_${interaction.values[0]}`)
       .setTitle("Trial Form");
@@ -136,77 +148,115 @@ client.on(Events.InteractionCreate, async interaction => {
       .setRequired(true);
 
     modal.addComponents(new ActionRowBuilder().addComponents(robloxInput));
-
     return interaction.showModal(modal);
   }
 
   if (interaction.isModalSubmit() && interaction.customId.startsWith("trial_modal_")) {
 
-    const trials = getTrials();
-    const script = interaction.customId.replace("trial_modal_", "");
+    const trials = getJSON("./trial.json");
+    const script = interaction.customId.replace("trial_modal_","");
     const robloxId = interaction.fields.getTextInputValue("roblox_id");
 
-    if (!trials[interaction.user.id]) trials[interaction.user.id] = {};
+    if(!trials[interaction.user.id]) trials[interaction.user.id] = {};
 
-    if (trials[interaction.user.id][script]) {
-      return interaction.reply({ content: "❌ Kamu sudah trial script ini.", ephemeral: true });
-    }
+    if(trials[interaction.user.id][script])
+      return interaction.reply({content:"❌ Kamu sudah trial script ini.",ephemeral:true});
 
     trials[interaction.user.id][script] = {
       robloxId,
-      expire: Date.now() + (3 * 24 * 60 * 60 * 1000)
+      expire: Date.now() + (3*24*60*60*1000)
     };
 
-    saveTrials(trials);
+    saveJSON("./trial.json",trials);
 
-    return interaction.reply({
-      content: `✅ Trial aktif untuk ${script}\nExpire: 3 hari`,
-      ephemeral: true
-    });
+    return interaction.reply({content:"✅ Trial aktif 3 hari.",ephemeral:true});
   }
 
-  /* ===== BUY SYSTEM ===== */
+  /* ===== BUY ===== */
   if (interaction.isButton() && interaction.customId === "buy") {
 
-    const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
-    if (existing) {
-      return interaction.reply({ content: "❌ Kamu sudah punya ticket.", ephemeral: true });
-    }
+    const counter = getJSON("./ticketCount.json");
+    counter.count += 1;
+    saveJSON("./ticketCount.json",counter);
+
+    const ticketName = `ticket-${String(counter.count).padStart(4,"0")}`;
 
     const ticket = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`,
+      name: ticketName,
       type: ChannelType.GuildText,
-      permissionOverwrites: [
-        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-        { id: OWNER_ID, allow: [PermissionsBitField.Flags.ViewChannel] }
+      parent: TICKET_CATEGORY,
+      permissionOverwrites:[
+        {id:interaction.guild.id,deny:[PermissionsBitField.Flags.ViewChannel]},
+        {id:interaction.user.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
+        {id:OWNER_ID,allow:[PermissionsBitField.Flags.ViewChannel]}
       ]
     });
 
-    const select = new StringSelectMenuBuilder()
-      .setCustomId("buy_select")
-      .setPlaceholder("Pilih script yang ingin dibeli")
-      .addOptions([
-        { label: "VIP System", value: "vip" },
-        { label: "Sync Dance", value: "sync" }
-      ]);
-
     const embed = new EmbedBuilder()
-      .setTitle("💳 Informasi Pembayaran")
+      .setTitle(`💳 ${ticketName}`)
+      .setColor("#00ffcc")
       .setDescription(`
-Pilih script di bawah ini.
+💎 VIP SYSTEM — Rp 150.000  
+💎 SYNC DANCE — Rp 100.000  
 
-🏦 BNI: 1234567890 a.n TG COMMUNITY
-📱 QRIS tersedia di bawah.
-`)
-      .setColor("#00ffcc");
+🏦 BNI  
+1932421659  
+a.n MUHAMMAD TEGAR PURNAMAWANSYAH  
 
-    await ticket.send({ embeds: [embed] });
-    await ticket.send({ files: [path.join(__dirname, "Assets", "qris.png")] });
-    await ticket.send({ components: [new ActionRowBuilder().addComponents(select)] });
+Kirim format:
 
-    return interaction.reply({ content: `✅ Ticket dibuat: ${ticket}`, ephemeral: true });
+ID ROBLOX: 12345678  
+SCRIPT: VIP / SYNC
+`);
+
+    await ticket.send({embeds:[embed]});
+
+    const qrisPath = path.join(__dirname,"Assets","qris.png");
+    if(fs.existsSync(qrisPath))
+      await ticket.send({files:[qrisPath]});
+
+    return interaction.reply({content:`✅ Ticket dibuat: ${ticket}`,ephemeral:true});
+  }
+
+  /* ===== SUCCESS ===== */
+  if (interaction.isChatInputCommand() && interaction.commandName === "success") {
+
+    if(interaction.user.id !== OWNER_ID)
+      return interaction.reply({content:"❌ Hanya owner.",ephemeral:true});
+
+    const messages = await interaction.channel.messages.fetch({limit:20});
+
+    let robloxId=null;
+    let scriptType=null;
+
+    messages.forEach(msg=>{
+      if(msg.content.includes("ID ROBLOX:"))
+        robloxId = msg.content.split("ID ROBLOX:")[1]?.trim();
+      if(msg.content.includes("SCRIPT:"))
+        scriptType = msg.content.split("SCRIPT:")[1]?.trim().toLowerCase();
+    });
+
+    if(!robloxId || !scriptType)
+      return interaction.reply({content:"❌ Format tidak ditemukan.",ephemeral:true});
+
+    const licenseKey = `${scriptType.toUpperCase()}-${uuidv4()}`;
+
+    const licenses = getJSON("./licenses.json");
+    licenses[robloxId] = { script:scriptType, license:licenseKey, permanent:true };
+    saveJSON("./licenses.json",licenses);
+
+    const fileName = scriptType==="vip" ? "vipsystem.rbxm" : "syncdance.rbxm";
+    const filePath = path.join(__dirname,"Files",fileName);
+
+    const userId = interaction.channel.permissionOverwrites.cache.find(p=>p.type===1 && p.id!==OWNER_ID)?.id;
+    const member = await interaction.guild.members.fetch(userId);
+
+    await member.send(`🎉 Pembayaran berhasil!\n🔑 License Permanent:\n${licenseKey}`);
+    if(fs.existsSync(filePath)) await member.send({files:[filePath]});
+
+    await interaction.reply("✅ Script & license dikirim.");
   }
 
 });
+
 client.login(TOKEN);
